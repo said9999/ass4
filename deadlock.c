@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
-#include <time.h>
+#include <sys/time.h>
 
 int no_proc;
 int strategy;
@@ -108,7 +108,7 @@ int main(int argc, char *argv[]){
 	for(i = 0; i < no_proc; i++){
 		pthread_t thread_c;
 		int *tmp = malloc(sizeof(*tmp));
-		*tmp = j;
+		*tmp = i;
 		
 		pthread_create( &thread_c, NULL, &commandGenerator, (void *) tmp);
 		childThread[j] = thread_c;
@@ -134,8 +134,10 @@ void *commandGenerator(void *id){
 
 		if (is_release){
 			release(p_id);
+			//sleep(1);
 		}else{
 			allocation(p_id);
+			//sleep(1);
 		}
 	}
 }
@@ -154,18 +156,18 @@ void release(int pid){
 			need[pid][i] += hold[pid][i];
 			hold[pid][i] = 0;
 
-			printf("is releasing res %d from proc %d, total \n", i, pid,hold[pid][i]);
+			printf("is releasing res %d from proc %d, total \n", i, pid);
 			break;
 		}
 	}
 
 	pthread_mutex_unlock(&critical_mutex);
-	thread_cond_signal(&condition_var);
+	pthread_cond_signal(&condition_var);
 }
 
 void bankerAllocation(int pid){
 	pthread_mutex_lock(&critical_mutex);
-
+	printf("is bankerAllocation %d\n",pid);
 	int *request;
 	request = requestGenerator(pid);
 	
