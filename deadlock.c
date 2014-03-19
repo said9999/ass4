@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <sys/time.h>
 
+#define RUN_INTERVAL 5
+
 int no_proc;
 int strategy;
 //int resource_type;
@@ -22,6 +24,7 @@ int *work;
 int *finish;
 
 pthread_cond_t  condition_var   = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t critical_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 double getTime(){
 	struct timeval time;
@@ -42,9 +45,6 @@ int* requestGenerator(int pid){
 }
 
 int isSafe(int pid);
-
-pthread_mutex_t critical_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 void input();
 void *commandGenerator(void *id);
 void release(int pid);
@@ -130,15 +130,17 @@ void *commandGenerator(void *id){
 	int p_id = *((int *)id);
 	
 	while(1){
-		int is_release = rand()%2;
+		int run_time = rand()%RUN_INTERVAL;
+		
+		sleep(run_time);			//simulate running time
+		
+		allocation(p_id);	
 
-		if (is_release){
-			release(p_id);
-			sleep(1);
-		}else{
-			allocation(p_id);
-			sleep(1);
-		}
+		run_time = rand()%RUN_INTERVAL;
+
+		sleep(run_time);			//simulate running time
+
+		release(pid);
 	}
 }
 
