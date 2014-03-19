@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <time.h>
 
 int no_proc;
 int strategy;
@@ -18,6 +19,29 @@ int **need;
 int **hold;
 int *avail;
 int *work;
+int *finish;
+
+pthread_cond_t  condition_var   = PTHREAD_COND_INITIALIZER;
+
+double getTime(){
+	struct timeval time;
+
+	gettimeofday(&time, NULL);
+	return (time.tv_sec + time.tv_usec/1000000.0);
+}
+
+int* requestGenerator(int pid){
+	int *request = (int *)malloc(sizeof(int) * no_res);
+
+	int i;
+	for(i = 0;i<no_res;i++){
+		request[i] = rand() % max[pid][i]; 
+	}
+
+	return request;
+}
+
+int isSafe(int pid);
 
 pthread_mutex_t critical_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -51,11 +75,16 @@ int main(int argc, char *argv[]){
 	 	allocation = &detectionAllocation;
 	 }
 
+	avail = malloc(sizeof(int) * no_res);
+	for(i=0;i<no_res;i++){
+		avail[i] = rand()%range_res+1;
+	}
+
 	 max = malloc(sizeof(int *) * no_proc);
 	 for (i = 0; i < no_proc; ++i){		
 	 	max[i] = malloc(no_res * sizeof(int));
 	 	for (j = 0; j < no_res; ++j){
-	 		max[i][j] = rand()%range_res;
+	 		max[i][j] = rand()%avail[j]+1;
 	 	}
 	 }
 
@@ -74,11 +103,6 @@ int main(int argc, char *argv[]){
 	 		hold[i][j] = 0;
 	 	}
 	 }
-
-	avail = malloc(sizeof(int) * no_res);
-	for(i=0;i<no_res;i++){
-		avail[i] = range_res;
-	}
 
 	//CREATE PROC
 	for(i = 0; i < no_proc; i++){
@@ -104,11 +128,10 @@ void input(){
 
 void *commandGenerator(void *id){
 	int p_id = *((int *)id);
-	int is_release = rand()%2;
-
 	
 	while(1){
-		
+		int is_release = rand()%2;
+
 		if (is_release){
 			release(p_id);
 		}else{
@@ -122,45 +145,110 @@ void release(int pid){
 
 	printf("is releasing proc %d\n", pid);
 
-	int index = rand()%no_res;
 	int i;
 	
 	for(i = 0;i<no_res;i++){
-		if(hold[pid][(index+i)%no_res] != 0){
-			hold[pid][(index+i)%no_res] = 0;
-			printf("is releasing res %d from proc %d, total \n", (index+i)%no_res, pid,hold[pid][(index+i)%no_res]);
+		//int seed = rand()%2;
+		if(hold[pid][i] != 0 ){
+			avail[i] += hold[pid][i];
+			need[pid][i] += hold[pid][i];
+			hold[pid][i] = 0;
+
+			printf("is releasing res %d from proc %d, total \n", i, pid,hold[pid][i]);
 			break;
 		}
 	}
 
 	pthread_mutex_unlock(&critical_mutex);
+	thread_cond_signal(&condition_var);
 }
 
 void bankerAllocation(int pid){
 	pthread_mutex_lock(&critical_mutex);
 
-	int request_no = rand()%range_res;
-	int request_res = rand()%no_res;
+	int *request;
+	request = requestGenerator(pid);
 	
-	step_1:
-	if (request_no > need[pid][request_res])
-	{
-		printf("error, impossible request amount\n");
-		goto banker_end;
-	}
+	int i;	
+	banker_step_1:
+		for(i=0;i<no_res;i++){
+			if (request[i] > need[pid][i]){
+				goto banker_exit;
+			}
+		}
 
-	step_2:
-	if (request_no > avail[request_res])
-	{
-		/* code */
-	}
+	banker_step_2:
+		for(i=0;i<no_res;i++){
+			if (request[i] > avail[i]){
+				//wait
+				pthread_cond_wait( &condition_var, &critical_mutex );
+				goto banker_step_1;
+			}
+		}
 
-	banker_end:
+	banker_step_3:
+		for(i = 0; i < no_res; i++){
+			avail[i] = avail[i] - request[i];
+			hold[pid][i] = hold[pid][i] + request[i];
+			need[pid][i] = need[pid][i] - request[i]; 
+		}
+
+		if(!isSafe(pid)){
+			for(i = 0; i < no_res; i++){
+				avail[i] = avail[i] + request[i];
+				hold[pid][i] = hold[pid][i] - request[i];
+				need[pid][i] = need[pid][i] + request[i]; 
+			}
+			//wait
+			pthread_cond_wait( &condition_var, &critical_mutex );
+			goto banker_step_1;
+		}
+
+	banker_exit:
 		pthread_mutex_unlock(&critical_mutex);
+		pthread_cond_signal(&condition_var);
+}
+
+int isSafe(int pid){
+	safe_step_1:
+		work = (int *)malloc(sizeof(int) * no_res);
+		finish = (int *)malloc(sizeof(int) * no_proc);
+
+		int i;
+		for(i=0;i<no_res;i++){
+			work[i] = avail[i];
+		}
+
+		for(i=0;i<no_proc;i++){
+			finish[i] = 0;
+		}
+
+	safe_step_2:
+		for(i=0;i<no_proc;i++){
+			if(finish[i] == 0 && need[pid][i] <= work[i]){
+				goto safe_step_3;
+			}
+		}
+		goto safe_step_4;
+
+	safe_step_3:
+		work[i] += hold[pid][i];
+		finish[i] = 1;
+		goto safe_step_2;
+
+	safe_step_4:
+		for(i = 0;i<no_proc;i++){
+			if(finish[i] == 0){
+				return 0;
+			}
+		}
+
+		return 1;
 }
 
 void detectionAllocation(int pid){
 	pthread_mutex_lock(&critical_mutex);
 
 	pthread_mutex_unlock(&critical_mutex);
+	pthread_cond_signal(&condition_var);
 }
