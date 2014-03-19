@@ -108,10 +108,10 @@ int main(int argc, char *argv[]){
 	for(i = 0; i < no_proc; i++){
 		pthread_t thread_c;
 		int *tmp = malloc(sizeof(*tmp));
-		*tmp = j;
+		*tmp = i;
 		
 		pthread_create( &thread_c, NULL, &commandGenerator, (void *) tmp);
-		childThread[j] = thread_c;
+		childThread[i] = thread_c;
 	}
 
 	//JOIN PROCS
@@ -140,7 +140,7 @@ void *commandGenerator(void *id){
 
 		sleep(run_time);			//simulate running time
 
-		release(pid);
+		release(p_id);
 	}
 }
 
