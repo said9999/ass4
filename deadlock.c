@@ -15,11 +15,14 @@ int no_proc,
 	**hold,
 	*avail,
 	*work,
-	*finish;
+	*finish,
+	*is_sleep;
 
 double simulate_time,
 		start_time,
-		end_time;
+		end_time,
+		*thread_run_time,
+		*thread_last_starting_time;
 
 void (*allocation)(int);
 
@@ -50,6 +53,19 @@ void simulateTimer(){
 	while(1){
 		if(getTime() - start_time > simulate_time){
 			printf("time is up\n");
+			int i;
+			double thread_sum = 0.0f;
+			for(i=0;i<no_proc;i++){
+				if(!is_sleep[i]){
+					thread_run_time[i] += getTime() - thread_last_starting_time[i];
+				}
+
+				printf("proc %d has run %lf sec\n",i,thread_run_time[i]);
+				thread_sum += thread_run_time[i];
+			}
+
+			printf("there are %d proc, and simulate time %lf, total %lf\n", no_proc,simulate_time, simulate_time * no_proc);
+			printf("threads sum is %lf\n", thread_sum);
 			exit(1);
 		}
 	}
@@ -86,6 +102,10 @@ int main(int argc, char *argv[]){
 	 }else{
 	 	allocation = &detectionAllocation;
 	 }
+
+	thread_run_time = (double *)malloc(sizeof(double) * no_proc);
+	thread_last_starting_time = (double *)malloc(sizeof(double) * no_proc);
+	is_sleep = (int *)malloc(sizeof(int) * no_proc);
 
 	avail = malloc(sizeof(int) * no_res);
 
@@ -143,6 +163,7 @@ int main(int argc, char *argv[]){
 		childThread[i] = thread_c;
 	}
 
+	simulateTimer();
 	//JOIN PROCS
 	for(i = 0; i< no_proc; i++){
 		pthread_join(childThread[i],NULL);
@@ -158,6 +179,12 @@ void input(){
 void *commandGenerator(void *id){
 	int p_id = *((int *)id);
 
+	//time recording
+	thread_run_time[p_id] = 0.0f;	//start time;
+	thread_last_starting_time[p_id] = getTime();
+	is_sleep[p_id] = 0;
+
+	//test codes
 	printf("create proc w id %d\n",p_id);
 	sleep(1);
 
@@ -220,9 +247,17 @@ void bankerAllocation(int pid){
 	banker_step_2:
 		for(i=0;i<no_res;i++){
 			if (request[i] > avail[i]){
+				//time recording before sleep
+				thread_run_time[pid] += getTime() - thread_last_starting_time[pid]; 
+				is_sleep[pid] = 1;
 				//wait
 				printf("proc %d is going to wait\n", pid);
+				
 				pthread_cond_wait( &condition_var, &critical_mutex );
+				//update timeing after waking up
+				thread_last_starting_time[pid] = getTime();
+				is_sleep[pid] = 0;
+
 				goto banker_step_1;
 			}
 		}
@@ -241,9 +276,18 @@ void bankerAllocation(int pid){
 				hold[pid][i] = hold[pid][i] - request[i];
 				need[pid][i] = need[pid][i] + request[i]; 
 			}
+
+			//time recording before sleep
+			thread_run_time[pid] += getTime() - thread_last_starting_time[pid]; 
 			//wait
 			printf("proc %d is going to wait\n",pid);
+			is_sleep[pid] = 1;
+
 			pthread_cond_wait( &condition_var, &critical_mutex );
+
+			//update timeing after waking up
+			thread_last_starting_time[pid] = getTime();
+			is_sleep[pid] = 0;
 			goto banker_step_1;
 		}else{
 			printf("safe to allocate resource to proc %d\n",pid);
