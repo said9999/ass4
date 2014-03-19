@@ -1,4 +1,4 @@
-// hello
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -108,7 +108,7 @@ int main(int argc, char *argv[]){
 	for(i = 0; i < no_proc; i++){
 		pthread_t thread_c;
 		int *tmp = malloc(sizeof(*tmp));
-		*tmp = i;
+		*tmp = j;
 		
 		pthread_create( &thread_c, NULL, &commandGenerator, (void *) tmp);
 		childThread[j] = thread_c;
@@ -134,10 +134,10 @@ void *commandGenerator(void *id){
 
 		if (is_release){
 			release(p_id);
-			//sleep(1);
+			sleep(1);
 		}else{
 			allocation(p_id);
-			//sleep(1);
+			sleep(1);
 		}
 	}
 }
@@ -167,7 +167,7 @@ void release(int pid){
 
 void bankerAllocation(int pid){
 	pthread_mutex_lock(&critical_mutex);
-	printf("is bankerAllocation %d\n",pid);
+
 	int *request;
 	request = requestGenerator(pid);
 	
