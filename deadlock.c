@@ -38,7 +38,7 @@ int* requestGenerator(int pid){
 
 	int i;
 	for(i = 0;i<no_res;i++){
-		request[i] = rand() % max[pid][i]; 
+		request[i] = rand() % max[pid][i]+1; 
 	}
 
 	return request;
@@ -186,16 +186,17 @@ void release(int pid){
 	
 	for(i = 0;i<no_res;i++){
 		//int seed = rand()%2;
+		printf("is releasing res %d from proc%d, total %d\n", i, pid,hold[pid][i]);
 		avail[i] += hold[pid][i];
 		need[pid][i] += hold[pid][i];
 		hold[pid][i] = 0;
 
-		printf("is releasing res %d from proc%d, total %d\n", i, pid,hold[pid][i]);
+		
 	}
 
 	pthread_mutex_unlock(&critical_mutex);
 	printf("proc %d is releasing the lock \n",pid);
-	pthread_cond_signal(&condition_var);
+	pthread_cond_broadcast(&condition_var);
 }
 
 void bankerAllocation(int pid){
@@ -234,20 +235,24 @@ void bankerAllocation(int pid){
 		}
 
 		if(!isSafe(pid)){
+			printf("Not safe to allocate resource to proc %d\n",pid);
 			for(i = 0; i < no_res; i++){
 				avail[i] = avail[i] + request[i];
 				hold[pid][i] = hold[pid][i] - request[i];
 				need[pid][i] = need[pid][i] + request[i]; 
 			}
 			//wait
+			printf("proc %d is going to wait\n",pid);
 			pthread_cond_wait( &condition_var, &critical_mutex );
 			goto banker_step_1;
+		}else{
+			printf("safe to allocate resource to proc %d\n",pid);
 		}
 
 	banker_exit:
 		pthread_mutex_unlock(&critical_mutex);
 		printf("proc %d is releaseing the lock\n", pid);
-		pthread_cond_signal(&condition_var);
+		pthread_cond_broadcast(&condition_var);
 }
 
 int isSafe(int pid){
@@ -291,5 +296,5 @@ void detectionAllocation(int pid){
 	pthread_mutex_lock(&critical_mutex);
 
 	pthread_mutex_unlock(&critical_mutex);
-	pthread_cond_signal(&condition_var);
+	pthread_cond_broadcast(&condition_var);
 }
