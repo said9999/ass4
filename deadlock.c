@@ -251,6 +251,65 @@ int isSafe(int pid){
 void detectionAllocation(int pid){
 	pthread_mutex_lock(&critical_mutex);
 
+	//request resource allocation
+	int **request;
+	int i,j;
+
+	request = malloc(sizeof(int *) * no_proc);
+	 for (i = 0; i < no_proc; i++){		//Question: Is the pid the same as i, starting from 0 to 4?
+	 	request[i] = requestGenerator(i);
+	 	}
+	 }
+
+	 //for(i = 0; i < no_proc; i++){
+
+	 //check whether there are enough resources available
+	 for(j=0;j<no_res;j++){
+		if (request[i][j] > avail[j]){
+			//wait
+			pthread_cond_wait( &condition_var, &critical_mutex );
+	 }
+
+	 //resource allocation 
+	 for(j = 0; j < no_res; i++){
+			avail[j] = avail[j] - request[i][j];
+			hold[i][j] = hold[i][j] + request[i][j];
+			//need[pid][i] = need[pid][i] - request[i]; 
+		}
+
+	  //deadlock detection
+
+ 	detection_step_1:
+
+ 	  work = (int *)malloc(sizeof(int) * no_res);
+	  finish = (int *)malloc(sizeof(int) * no_proc);
+
+	  for(j=0;j<no_res;j++){
+			work[j] = avail[j];
+		}
+
+	  for(i=0;i<no_proc;i++){
+	  		if(avail[j]!=0){
+	  			finish[j] = FALSE;
+	  		}
+			else{
+				finish[j]= TRUE;
+			}
+		}	
+
+	  detection_step_2:
+
+	  	for(i=0;i<no_proc;i++){
+			if(finish[i] == 0 && need[pid][i] <= work[i]){
+				goto safe_step_3;
+			}
+		}
+
+	  detection_step_3:
+
+	}
+
+
 	pthread_mutex_unlock(&critical_mutex);
 	pthread_cond_signal(&condition_var);
 }
