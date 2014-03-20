@@ -16,7 +16,8 @@ int no_proc,
 	*avail,
 	*work,
 	*finish,
-	*is_sleep;
+	*is_sleep,
+	**request_matrix;
 
 double simulate_time,
 		start_time,
@@ -128,6 +129,16 @@ int main(int argc, char *argv[]){
 	}
 	printf("]\n");
 
+	request_matrix = malloc(sizeof(int *) * no_proc);
+	for (i = 0; i < no_proc; ++i){		
+		request_matrix[i] = malloc(no_res * sizeof(int));
+		for (j = 0; j < no_res; ++j){
+			request_matrix[i][j] = 0;
+			printf("%d ", request_matrix[i][j]);
+		}
+		printf("\n");
+	}
+
 	printf("need is : [");
 	 need = malloc(sizeof(int *) * no_proc);
 	 for (i = 0; i < no_proc; ++i){		
@@ -199,7 +210,6 @@ void *commandGenerator(void *id){
 
 		//sleep(run_time);			//simulate running time
 
-		release(p_id);
 	}
 }
 
@@ -297,6 +307,8 @@ void bankerAllocation(int pid){
 		pthread_mutex_unlock(&critical_mutex);
 		printf("proc %d is releaseing the lock\n", pid);
 		pthread_cond_broadcast(&condition_var);
+
+		release(p_id);
 }
 
 int isSafe(int pid){
@@ -322,7 +334,10 @@ int isSafe(int pid){
 		goto safe_step_4;
 
 	safe_step_3:
-		work[i] += hold[pid][i];
+		for (i = 0; i < no_res; ++i){
+			work[i] += hold[pid][i];
+		}
+
 		finish[i] = 1;
 		goto safe_step_2;
 
@@ -340,64 +355,116 @@ void detectionAllocation(int pid){
 	pthread_mutex_lock(&critical_mutex);
 
 	//request resource allocation
-	int **request;
 	int i,j;
+	int *request;
+	request = requestGenerator(pid);
 
-	request = malloc(sizeof(int *) * no_proc);
-	 for (i = 0; i < no_proc; i++){		//Question: Is the pid the same as i, starting from 0 to 4?
-	 	request[i] = requestGenerator(i);
-	 	}
-	 }
+	 work = (int *)malloc(sizeof(int) * no_res);
+	 finish = (int *)malloc(sizeof(int) * no_proc);
 
-	 //for(i = 0; i < no_proc; i++){
-
-	 //check whether there are enough resources available
-	 for(j=0;j<no_res;j++){
-		if (request[i][j] > avail[j]){
-			//wait
-			pthread_cond_wait( &condition_var, &critical_mutex );
-	 }
-
-	 //resource allocation 
-	 for(j = 0; j < no_res; i++){
-			avail[j] = avail[j] - request[i][j];
-			hold[i][j] = hold[i][j] + request[i][j];
-			//need[pid][i] = need[pid][i] - request[i]; 
-		}
-
-	  //deadlock detection
-
- 	detection_step_1:
-
- 	  work = (int *)malloc(sizeof(int) * no_res);
-	  finish = (int *)malloc(sizeof(int) * no_proc);
-
-	  for(j=0;j<no_res;j++){
-			work[j] = avail[j];
-		}
-
-	  for(i=0;i<no_proc;i++){
-	  		if(avail[j]!=0){
-	  			finish[j] = FALSE;
-	  		}
-			else{
-				finish[j]= TRUE;
-			}
-		}	
-
-	  detection_step_2:
-
-	  	for(i=0;i<no_proc;i++){
-			if(finish[i] == 0 && need[pid][i] <= work[i]){
-				goto safe_step_3;
-			}
-		}
-
-	  detection_step_3:
-
+	for (i = 0; i < no_res; ++i)
+	{
+		request_matrix[pid][i]=request[i];
 	}
 
+	 //check whether there are enough resources available
+	detection_step_1:
+		for(i=0;i<no_res;i++){
+			if (request[i] > need[pid][i]){
+				printf("impossible assign\n");
+				sleep(1);
+				goto detection_exit;
+			}
+		}
 
-	pthread_mutex_unlock(&critical_mutex);
-	pthread_cond_broadcast(&condition_var);
+	detection_step_2:
+		for(i=0;i<no_res;i++){
+			if (request[i] > avail[i]){
+				//time recording before sleep
+				thread_run_time[pid] += getTime() - thread_last_starting_time[pid]; 
+				is_sleep[pid] = 1;
+				//wait
+				printf("proc %d is going to wait\n", pid);
+				
+				pthread_cond_wait( &condition_var, &critical_mutex );
+				//update timeing after waking up
+				thread_last_starting_time[pid] = getTime();
+				is_sleep[pid] = 0;
+
+				goto detection_step_1;
+			}
+		}
+
+	detection_step_3:
+		for(i = 0; i < no_res; i++){
+			avail[i] = avail[i] - request[i];
+			hold[pid][i] = hold[pid][i] + request[i];
+			need[pid][i] = need[pid][i] - request[i]; 
+		}
+
+		int *finish_vector;
+
+		if(isDeadlock(pid, finish_vector)){
+			
+
+		}
+
+	detection_exit:
+		pthread_mutex_unlock(&critical_mutex);
+		pthread_cond_broadcast(&condition_var);
 }
+
+int isDeadlock(int pid, int *finish_vector){
+	deadlock_step_1:
+		work = (int *)malloc(sizeof(int) * no_res);
+		finish = (int *)malloc(sizeof(int) * no_proc);
+
+		int i,j;
+		for(i=0;i<no_res;i++){
+			work[i] = avail[i];
+		}
+
+		for(i=0;i<no_proc;++i){
+			finish[i]=1;
+			for (j = 0; j < no_res ; ++j)
+			{
+				if(hold[i][j]!=0){
+					finish[i] = 0;
+					break;
+				}
+			}	
+		}
+
+		finish_vector = finish;
+
+	deadlock_step_2:
+		for(i=0;i<no_proc;++j){
+			
+			if(finish[i] == 0){
+				for (j = 0; j < no_res; ++j){
+					if(request_matrix[i][j]>work[j]){
+						goto deadlock_step_4;
+					}
+				}
+			}else{
+				goto deadlock_step_4;
+			}
+		}
+
+	deadlock_step_3:
+		for (i = 0; i < no_res; ++i){
+			work[i] += hold[pid][i];
+		}
+		finish[i] = 1;
+		goto deadlock_step_2;
+
+	deadlock_step_4:
+		for(i = 0;i<no_proc;i++){
+			if(finish[i] == 0){
+				return 0;
+			}
+		}
+
+}
+
+
