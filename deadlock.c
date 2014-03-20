@@ -78,6 +78,8 @@ void *commandGenerator(void *id);
 void release(int pid);
 void bankerAllocation(int pid);
 void detectionAllocation(int pid);
+int isDeadlock(int pid, int *finish_vector);
+void recoverDeadlock(int pid, int *finish_vector);
 
 
 
@@ -405,8 +407,7 @@ void detectionAllocation(int pid){
 		int *finish_vector;
 
 		if(isDeadlock(pid, finish_vector)){
-			
-
+			recoverDeadlock(pid,finish_vector);
 		}
 
 	detection_exit:
@@ -464,6 +465,22 @@ int isDeadlock(int pid, int *finish_vector){
 				return 0;
 			}
 		}
+
+}
+
+void recoverDeadlock (int pid, int *finish_vector){
+	int i,*vector;
+	for (i = 0; i < no_proc; ++i){
+		if(finish[i]==0){
+			release(i);
+			finish[i]=1;
+			break;
+		}
+	}
+
+	if(isDeadlock(pid, vector)){
+		recoverDeadlock(pid,vector);
+	}
 
 }
 
