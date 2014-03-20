@@ -42,7 +42,7 @@ int* requestGenerator(int pid){
 
 	int i;
 	for(i = 0;i<no_res;i++){
-		request[i] = (rand()%max[pid][i])/2+1; 
+		request[i] = (rand()%max[pid][i])+1; 
 	}
 
 	return request;
@@ -91,7 +91,7 @@ int main(int argc, char *argv[]){
 
 	//test data
 	no_proc = 5;
-	strategy = 0;
+	strategy = 1;
 	no_res = 4;
 	range_res = 20;
 	simulate_time = 10;
@@ -176,7 +176,7 @@ int main(int argc, char *argv[]){
 		childThread[i] = thread_c;
 	}
 
-	simulateTimer();
+	//simulateTimer();
 	//JOIN PROCS
 	for(i = 0; i< no_proc; i++){
 		pthread_join(childThread[i],NULL);
@@ -210,7 +210,7 @@ void *commandGenerator(void *id){
 
 		run_time = rand()%RUN_INTERVAL;
 
-		sleep(run_time);
+		//sleep(run_time);
 
 		release(p_id);
 	}
@@ -393,17 +393,35 @@ void detectionAllocation(int pid){
 	detection_step_2:
 		for(i=0;i<no_res;i++){
 			if (request[i] > avail[i]){
-				//time recording before sleep
-				thread_run_time[pid] += getTime() - thread_last_starting_time[pid]; 
-				is_sleep[pid] = 1;
-				//wait
-				printf("proc %d is going to wait\n", pid);
-				
-				pthread_cond_wait( &condition_var, &critical_mutex );
-				//update timeing after waking up
-				thread_last_starting_time[pid] = getTime();
-				is_sleep[pid] = 0;
+				sleep(1);
+				int *finish_vector;
 
+				if(isDeadlock(pid, finish_vector)){
+					printf("deadlock is found\n");
+					sleep(1);
+					// int m;
+					// for(m=0;m<no_res;m++){
+					// 	printf("%d ",avail[m]);
+					// }
+					// printf("\n");
+					// sleep(1);
+					// for(i=0;i<no_proc;i++){
+					// 	printf("%d ",finish[i]);
+					// }
+					// printf("\n");
+					recoverDeadlock(pid,finish_vector);
+				}else{
+					//time recording before sleep
+					thread_run_time[pid] += getTime() - thread_last_starting_time[pid]; 
+					is_sleep[pid] = 1;
+					//wait
+					printf("proc %d is going to wait\n", pid);
+					
+					pthread_cond_wait( &condition_var, &critical_mutex );
+					//update timeing after waking up
+					thread_last_starting_time[pid] = getTime();
+					is_sleep[pid] = 0;
+				}
 				goto detection_step_1;
 			}
 		}
@@ -415,26 +433,6 @@ void detectionAllocation(int pid){
 			need[pid][i] = need[pid][i] - request[i]; 
 			printf("proc %d get res type %d amount %d\n",pid, i,request[i] );
 			request_matrix[pid][i] = 0;
-		}
-
-		int *finish_vector;
-
-		printf("proc %d shits here\n",pid );
-
-		if(isDeadlock(pid, finish_vector)){
-			printf("deadlock is found\n");
-			sleep(1);
-			int m;
-			for(m=0;m<no_res;m++){
-				printf("%d ",avail[m]);
-			}
-			printf("\n");
-			sleep(1);
-			for(i=0;i<no_proc;i++){
-				printf("%d ",finish[i]);
-			}
-			printf("\n");
-			recoverDeadlock(pid,finish_vector);
 		}
 
 	detection_exit:
