@@ -42,7 +42,7 @@ int* requestGenerator(int pid){
 
 	int i;
 	for(i = 0;i<no_res;i++){
-		request[i] = rand() % max[pid][i]+1; 
+		request[i] = (rand()%max[pid][i])/2+1; 
 	}
 
 	return request;
@@ -91,9 +91,9 @@ int main(int argc, char *argv[]){
 
 	//test data
 	no_proc = 5;
-	strategy = 1;
+	strategy = 0;
 	no_res = 4;
-	range_res = 2;
+	range_res = 20;
 	simulate_time = 10;
 
 	//INIT PART
@@ -207,6 +207,12 @@ void *commandGenerator(void *id){
 		//sleep(run_time);			//simulate running time
 		
 		allocation(p_id);	
+
+		run_time = rand()%RUN_INTERVAL;
+
+		sleep(run_time);
+
+		release(p_id);
 	}
 }
 
@@ -304,8 +310,6 @@ void bankerAllocation(int pid){
 		pthread_mutex_unlock(&critical_mutex);
 		printf("proc %d is releaseing the lock\n", pid);
 		pthread_cond_broadcast(&condition_var);
-
-		release(pid);
 }
 
 int isSafe(int pid){
@@ -324,8 +328,18 @@ int isSafe(int pid){
 
 	safe_step_2:
 		for(i=0;i<no_proc;i++){
-			if(finish[i] == 0 && need[pid][i] <= work[i]){
-				goto safe_step_3;
+			if(finish[i] == 0 ){
+				int isValid = 1;
+				int m;
+				for(m = 0; m < no_res; m++){
+					if (need[i][m] > work[m]){
+						isValid = 0;
+					}
+				}
+
+				if(isValid){
+					goto safe_step_3;
+				}
 			}
 		}
 		goto safe_step_4;
@@ -409,6 +423,13 @@ void detectionAllocation(int pid){
 
 		if(isDeadlock(pid, finish_vector)){
 			printf("deadlock is found\n");
+			sleep(1);
+			int m;
+			for(m=0;m<no_res;m++){
+				printf("%d ",avail[m]);
+			}
+			printf("\n");
+			sleep(1);
 			for(i=0;i<no_proc;i++){
 				printf("%d ",finish[i]);
 			}
@@ -420,7 +441,7 @@ void detectionAllocation(int pid){
 		pthread_mutex_unlock(&critical_mutex);
 		pthread_cond_broadcast(&condition_var);
 
-		release(pid);
+		printf("proc %d is releasing the lock\n", pid);
 }
 
 int isDeadlock(int pid, int *finish_vector){
@@ -444,22 +465,24 @@ int isDeadlock(int pid, int *finish_vector){
 			}	
 		}
 
-		finish_vector = finish;
-
 	deadlock_step_2:
-		for(i=0;i<no_proc;++j){
-			
+		printf("in step 2\n");
+		for(i=0;i<no_proc;++i){
 			if(finish[i] == 0){
+				int isValid = 1;
+
 				for (j = 0; j < no_res; ++j){
 					if(request_matrix[i][j]>work[j]){
-						goto deadlock_step_4;
+						isValid = 0;
+						break;
 					}
 				}
-				goto deadlock_step_3;
-			}else{
-				goto deadlock_step_4;
+				if(isValid){
+					goto deadlock_step_3;
+				}
 			}
 		}
+		goto deadlock_step_4;
 
 	deadlock_step_3:
 		for (j = 0; j < no_res; ++j){
@@ -469,6 +492,7 @@ int isDeadlock(int pid, int *finish_vector){
 		goto deadlock_step_2;
 
 	deadlock_step_4:
+		finish_vector = finish;
 		for(i = 0;i<no_proc;i++){
 			if(finish[i] == 0){
 				return 1;
@@ -485,8 +509,8 @@ void recoverDeadlock (int pid, int *finish_vector){
 		if(finish[i]==0){
 			thread_run_time[i] = 0;
 			thread_last_starting_time[i] = getTime();
-			printf("proc %d is going to release\n", i);
-			
+			printf("proc %d is going to be killed\n", i);
+			sleep(1);
 			int j;
 	
 			for(j = 0;j<no_res;j++){
