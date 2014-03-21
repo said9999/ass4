@@ -6,36 +6,43 @@
 
 #define RUN_INTERVAL 5
 
-int no_proc,
-	strategy,
-	no_res,
-	range_res,
-	**max,
-	**need,
-	**hold,
-	*avail,
-	*work,
-	*finish,
-	*is_sleep,
-	**request_matrix;
+int no_proc,				//no of process
+	strategy,				//strategy to use 0:banker 1:detection
+	no_res,					//type of resources
+	range_res,				//range of resources
+	**max,					//max matrix
+	**need,					//need matrix
+	**hold,					//hold/allocation mactrix
+	*avail,					//available vector
+	*work,					//work 	vector
+	*finish,				//finish vector
+	*is_sleep,				//is_sleep array to check whether a thread is waiting
+	**request_matrix;		//request matrix
 
-double simulate_time,
-		start_time,
-		end_time,
-		*thread_run_time,
-		*thread_last_starting_time;
+double simulate_time,		//running time for the simulator
+		start_time,			//start time for the simulator
+		end_time,			//end time for the simulator
+		*thread_run_time,	//run time for each thread
+		*thread_last_starting_time;//last start time for each thread, will update after waking up
 
-void (*allocation)(int);
+void (*allocation)(int);	//allocation strategy
 
 pthread_cond_t  condition_var   = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t critical_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/*
+ * This function get the current time by using sec
+ */
 double getTime(){
 	struct timeval time;
 
 	gettimeofday(&time, NULL);
 	return (time.tv_sec + time.tv_usec/1000000.0);
 }
+
+/*
+ * This function randomly generate request vector for each process
+ */
 
 int* requestGenerator(int pid){
 	int *request = (int *)malloc(sizeof(int) * no_res);
@@ -48,6 +55,9 @@ int* requestGenerator(int pid){
 	return request;
 }
 
+/*
+ * This function kill the main thread after simulate time and print out result data
+ */
 void simulateTimer(){
 	start_time = getTime();
 
@@ -72,94 +82,80 @@ void simulateTimer(){
 	}
 }
 
-int isSafe(int pid);
-void input();
-void *commandGenerator(void *id);
-void release(int pid);
-void bankerAllocation(int pid);
-void detectionAllocation(int pid);
-int isDeadlock(int pid, int *finish_vector);
-void recoverDeadlock(int pid, int *finish_vector);
+void input();											//get input argument
+int isSafe(int pid);									//isSafe in banker argumentlgorithm
+void *commandGenerator(void *id);						//generate cmd for process
+void release(int pid);									//release resource for one process
+void bankerAllocation(int pid);							//banker algorithm
+void detectionAllocation(int pid);						//detection algorithm
+int isDeadlock(int pid, int *finish_vector);			//isdeaklock in detection algorithm
+void recoverDeadlock(int pid, int *finish_vector);		//recover deadlock
 
 
 
 int main(int argc, char *argv[]){
-	int i,
-		j;
-
+	//GET INPUT
 	input();
 
-	//INIT PART
-	 srand(1024);
-	 pthread_t childThread[no_proc];
-
-	 if (strategy == 0){
-	 	allocation = &bankerAllocation;
-	 }else{
-	 	allocation = &detectionAllocation;
-	 }
+	/************
+	 *INIT PART
+	 ************/
+	int i,
+		j;
+	
+	pthread_t childThread[no_proc];
+	srand(1024);										//set seed 
+	
+	if (strategy == 0){
+		allocation = &bankerAllocation;
+	}else{
+		allocation = &detectionAllocation;
+	}
 
 	thread_run_time = (double *)malloc(sizeof(double) * no_proc);
 	thread_last_starting_time = (double *)malloc(sizeof(double) * no_proc);
 	is_sleep = (int *)malloc(sizeof(int) * no_proc);
 
 	avail = malloc(sizeof(int) * no_res);
-
-	//printf("avail is : [");
 	for(i=0;i<no_res;i++){
 		avail[i] = rand()%range_res+1;
-		//printf("%d ",avail[i]);
 	}
-	//printf("]\n");
 
-	//printf("max is : [");
 	max = malloc(sizeof(int *) * no_proc);
 	for (i = 0; i < no_proc; ++i){		
 		max[i] = malloc(no_res * sizeof(int));
 		for (j = 0; j < no_res; ++j){
 			max[i][j] = rand()%avail[j]+1;
-	//		printf("%d ", max[i][j]);
 		}
-	//	printf("\n");
 	}
-	//printf("]\n");
 
 	request_matrix = malloc(sizeof(int *) * no_proc);
 	for (i = 0; i < no_proc; ++i){		
 		request_matrix[i] = malloc(no_res * sizeof(int));
 		for (j = 0; j < no_res; ++j){
 			request_matrix[i][j] = 0;
-	//		printf("%d ", request_matrix[i][j]);
 		}
-	//	printf("\n");
 	}
 
-	//printf("need is : [");
-	 need = malloc(sizeof(int *) * no_proc);
-	 for (i = 0; i < no_proc; ++i){		
-	 	need[i] = malloc(no_res * sizeof(int));
-	 	for (j = 0; j < no_res; ++j){
-	 		need[i][j] = max[i][j];
-	 //		printf("%d ", need[i][j]);
-	 	}
-	 	//printf("\n");
-	 }
-	  //printf("]\n");
+	need = malloc(sizeof(int *) * no_proc);
+	for (i = 0; i < no_proc; ++i){		
+		need[i] = malloc(no_res * sizeof(int));
+		for (j = 0; j < no_res; ++j){
+			need[i][j] = max[i][j];
+		}
+	}
 
-	 //printf("hold is : [");
-	 hold = malloc(sizeof(int *) * no_proc);
-	 for (i = 0; i < no_proc; ++i){		
-	 	hold[i] = malloc(no_res * sizeof(int));
-	 	for (j = 0; j < no_res; ++j){
-	 		hold[i][j] = 0;
-	 	//	printf("%d ", hold[i][j]);
-	 	}
-	 	//printf("\n");
-	 }
-	 //printf("]\n");
-
-	//sleep(3);
-	//CREATE PROC
+	hold = malloc(sizeof(int *) * no_proc);
+	for (i = 0; i < no_proc; ++i){		
+		hold[i] = malloc(no_res * sizeof(int));
+		for (j = 0; j < no_res; ++j){
+			hold[i][j] = 0;
+		}
+	}
+	
+	/***********
+	 * CREATE PROC
+	 *************/
 	for(i = 0; i < no_proc; i++){
 		pthread_t thread_c;
 		int *tmp = malloc(sizeof(*tmp));
@@ -169,8 +165,14 @@ int main(int argc, char *argv[]){
 		childThread[i] = thread_c;
 	}
 
+	/**********
+	 * Start Timer
+	 ***********/
 	simulateTimer();
-	//JOIN PROCS
+	
+	/************
+	 * JOIN PROCS
+	 ***********/
 	for(i = 0; i< no_proc; i++){
 		pthread_join(childThread[i],NULL);
 	}
@@ -201,14 +203,8 @@ void *commandGenerator(void *id){
 	thread_last_starting_time[p_id] = getTime();
 	is_sleep[p_id] = 0;
 
-	//test codes
-	//printf("create proc w id %d\n",p_id);
-	//sleep(1);
-
 	while(1){
-		int run_time = rand()%RUN_INTERVAL;
-		
-		//sleep(run_time);			
+		int run_time = rand()%RUN_INTERVAL;			
 		
 		allocation(p_id);	
 
@@ -223,30 +219,20 @@ void *commandGenerator(void *id){
 void release(int pid){
 	pthread_mutex_lock(&critical_mutex);	
 
-	//printf("is releasing proc %d\n", pid);
-	//printf("proc %d is holding the lock \n",pid);
-
 	int i;
 	
 	for(i = 0;i<no_res;i++){
-		//int seed = rand()%2;
-		//printf("is releasing res %d from proc%d, total %d\n", i, pid,hold[pid][i]);
 		avail[i] += hold[pid][i];
 		need[pid][i] += hold[pid][i];
 		hold[pid][i] = 0;
-
-		
 	}
 
 	pthread_mutex_unlock(&critical_mutex);
-	//printf("proc %d is releasing the lock \n",pid);
 	pthread_cond_broadcast(&condition_var);
 }
 
 void bankerAllocation(int pid){
 	pthread_mutex_lock(&critical_mutex);
-
-	//printf("proc %d is holding the lock\n", pid);
 
 	int *request;
 	request = requestGenerator(pid);
@@ -255,8 +241,6 @@ void bankerAllocation(int pid){
 	banker_step_1:
 		for(i=0;i<no_res;i++){
 			if (request[i] > need[pid][i]){
-				//printf("impossible assign\n");
-				//sleep(1);
 				goto banker_exit;
 			}
 		}
@@ -264,14 +248,11 @@ void bankerAllocation(int pid){
 	banker_step_2:
 		for(i=0;i<no_res;i++){
 			if (request[i] > avail[i]){
-				//time recording before sleep
 				thread_run_time[pid] += getTime() - thread_last_starting_time[pid]; 
 				is_sleep[pid] = 1;
-				//wait
-				//printf("proc %d is going to wait\n", pid);
 				
 				pthread_cond_wait( &condition_var, &critical_mutex );
-				//update timeing after waking up
+				
 				thread_last_starting_time[pid] = getTime();
 				is_sleep[pid] = 0;
 
@@ -280,31 +261,27 @@ void bankerAllocation(int pid){
 		}
 
 	banker_step_3:
-		for(i = 0; i < no_res; i++){
+		for(i = 0; i < no_res; i++){					//provisional allocation
 			avail[i] = avail[i] - request[i];
 			hold[pid][i] = hold[pid][i] + request[i];
 			need[pid][i] = need[pid][i] - request[i]; 
 		}
 
-		if(!isSafe(pid)){
-			//printf("Not safe to allocate resource to proc %d\n",pid);
+		if(!isSafe(pid)){								//if not safe, cancel allocation
 			for(i = 0; i < no_res; i++){
 				avail[i] = avail[i] + request[i];
 				hold[pid][i] = hold[pid][i] - request[i];
 				need[pid][i] = need[pid][i] + request[i]; 
 			}
 
-			//time recording before sleep
 			thread_run_time[pid] += getTime() - thread_last_starting_time[pid]; 
-			//wait
-			//printf("proc %d is going to wait\n",pid);
 			is_sleep[pid] = 1;
 
 			pthread_cond_wait( &condition_var, &critical_mutex );
 
-			//update timeing after waking up
 			thread_last_starting_time[pid] = getTime();
 			is_sleep[pid] = 0;
+
 			goto banker_step_1;
 		}else{
 			///printf("safe to allocate resource to proc %d\n",pid);
@@ -312,7 +289,6 @@ void bankerAllocation(int pid){
 
 	banker_exit:
 		pthread_mutex_unlock(&critical_mutex);
-		////printf("proc %d is releaseing the lock\n", pid);
 		pthread_cond_broadcast(&condition_var);
 }
 
@@ -368,64 +344,42 @@ int isSafe(int pid){
 
 void detectionAllocation(int pid){
 	pthread_mutex_lock(&critical_mutex);
-	///printf("proc %d is holding the lock\n", pid);
 
-	//request resource allocation
 	int i,j;
 	int *request;
 	request = requestGenerator(pid);
-	///printf("generate request from %d\n",pid);
-	//sleep(1);
 
-	 work = (int *)malloc(sizeof(int) * no_res);
-	 finish = (int *)malloc(sizeof(int) * no_proc);
+	work = (int *)malloc(sizeof(int) * no_res);
+	finish = (int *)malloc(sizeof(int) * no_proc);
 
 	for (i = 0; i < no_res; ++i){
 		request_matrix[pid][i]=request[i];
 	}
 
-	 //check whether there are enough resources available
 	detection_step_1:
 		for(i=0;i<no_res;i++){
 			if (request[i] > need[pid][i]){
-				//printf("impossible assign\n");
-				//sleep(1);
 				goto detection_exit;
 			}
 		}
 
 	detection_step_2:
 		for(i=0;i<no_res;i++){
-			if (request[i] > avail[i]){
-				//sleep(1);
-				int *finish_vector;
+			if (request[i] > avail[i]){				//if resource cannot be granted immediately
+				int *finish_vector;	
 
-				if(isDeadlock(pid, finish_vector)){
-					//printf("deadlock is found\n");
-					//sleep(1);
-					// int m;
-					// for(m=0;m<no_res;m++){
-					// 	printf("%d ",avail[m]);
-					// }
-					// printf("\n");
-					// sleep(1);
-					// for(i=0;i<no_proc;i++){
-					// 	printf("%d ",finish[i]);
-					// }
-					// printf("\n");
+				if(isDeadlock(pid, finish_vector)){ //check deadlock first
 					recoverDeadlock(pid,finish_vector);
-				}else{
-					//time recording before sleep
+				}else{								//else wait
 					thread_run_time[pid] += getTime() - thread_last_starting_time[pid]; 
 					is_sleep[pid] = 1;
-					//wait
-					//printf("proc %d is going to wait\n", pid);
 					
 					pthread_cond_wait( &condition_var, &critical_mutex );
-					//update timeing after waking up
+
 					thread_last_starting_time[pid] = getTime();
 					is_sleep[pid] = 0;
 				}
+
 				goto detection_step_1;
 			}
 		}
@@ -435,15 +389,12 @@ void detectionAllocation(int pid){
 			avail[i] = avail[i] - request[i];
 			hold[pid][i] = hold[pid][i] + request[i];
 			need[pid][i] = need[pid][i] - request[i]; 
-			//printf("proc %d get res type %d amount %d\n",pid, i,request[i] );
 			request_matrix[pid][i] = 0;
 		}
 
 	detection_exit:
 		pthread_mutex_unlock(&critical_mutex);
 		pthread_cond_broadcast(&condition_var);
-
-		//printf("proc %d is releasing the lock\n", pid);
 }
 
 int isDeadlock(int pid, int *finish_vector){
@@ -468,7 +419,6 @@ int isDeadlock(int pid, int *finish_vector){
 		}
 
 	deadlock_step_2:
-		//printf("in step 2\n");
 		for(i=0;i<no_proc;++i){
 			if(finish[i] == 0){
 				int isValid = 1;
@@ -506,29 +456,34 @@ int isDeadlock(int pid, int *finish_vector){
 
 void recoverDeadlock (int pid, int *finish_vector){
 	int i,*vector;
-	//printf("inside recover\n");
+
+	int offset = rand()%100;
+	int index = offset%no_proc;
+
+	//randomly release a deadlock process
 	for (i = 0; i < no_proc; ++i){
-		if(finish[i]==0){
-			thread_run_time[i] = 0;
-			thread_last_starting_time[i] = getTime();
-			//printf("proc %d is going to be killed\n", i);
-			//sleep(1);
+
+		if(finish[index]==0){
+			thread_run_time[index] = 0;
+			thread_last_starting_time[index] = getTime();
 			int j;
 	
 			for(j = 0;j<no_res;j++){
-				//int seed = rand()%2;
-				//printf("is releasing res %d from proc%d, total %d\n", i, pid,hold[i][j]);
-				avail[j] += hold[i][j];
-				need[i][j] += hold[i][j];
-				hold[i][j] = 0;
+				avail[j] += hold[index][j];
+				need[i][j] += hold[index][j];
+				hold[index][j] = 0;
 			}		
 
-			finish[i]=1;
+			finish[index]=1;
 			break;
 		}
+
+		index++;
+		index = index%no_proc;
 	}
 
-	if(isDeadlock(pid, vector)){
+
+	if(isDeadlock(pid, vector)){		//if still deadlock, then resolve deadlock again
 		recoverDeadlock(pid,vector);
 	}
 
