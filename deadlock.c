@@ -100,6 +100,7 @@ int main(int argc, char *argv[]){
 	/************
 	 *INIT PART
 	 ************/
+	 printf("\nSimulating...\n");
 	int i,
 		j;
 	
